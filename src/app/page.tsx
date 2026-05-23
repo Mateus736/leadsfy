@@ -1,3 +1,5 @@
+import { WaitlistModal } from "@/components/waitlist-modal";
+
 export default function Home() {
   return (
     <div className="min-h-screen">
@@ -35,12 +37,10 @@ export default function Home() {
             você.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href="#"
-              className="rounded-full bg-accent px-8 py-3 font-medium text-white shadow-sm hover:bg-accent-muted transition-colors"
-            >
-              Quero ser avisado
-            </a>
+            <WaitlistModal
+              triggerLabel="Quero ser avisado"
+              triggerClassName="rounded-full bg-accent px-8 py-3 font-medium text-white shadow-sm hover:bg-accent-muted transition-colors"
+            />
             <a
               href="#como-funciona"
               className="rounded-full border border-border bg-card px-8 py-3 font-medium hover:border-accent/30 transition-colors"
