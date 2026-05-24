@@ -1,261 +1,91 @@
-import { getSubredditsForRegion, type SearchRegion } from "@/lib/regions";
-
-const STOP_WORDS_PT = new Set([
-  "a",
-  "o",
-  "e",
-  "de",
-  "da",
-  "do",
-  "das",
-  "dos",
-  "em",
-  "no",
-  "na",
-  "nos",
-  "nas",
-  "um",
-  "uma",
-  "uns",
-  "umas",
-  "para",
-  "com",
-  "por",
-  "que",
-  "se",
-  "ao",
-  "aos",
-  "como",
-  "mais",
-  "muito",
-  "sobre",
-  "seu",
-  "sua",
-  "seus",
-  "suas",
-  "meu",
-  "minha",
-  "trabalho",
-  "trabalhos",
-  "ofereço",
-  "ofereco",
-  "servico",
-  "servicos",
-  "desenvolvo",
-  "crio",
-  "facoo",
-  "faco",
+export const STOP_WORDS = new Set([
+  "a", "o", "e", "de", "da", "do", "das", "dos", "em", "no", "na", "nos",
+  "nas", "um", "uma", "uns", "umas", "para", "com", "por", "que", "se",
+  "ao", "aos", "sobre", "seu", "sua", "seus", "suas", "mais", "muito",
+  "como", "mas", "também", "já", "só", "bem", "ainda",
 ]);
 
-const STOP_WORDS_EN = new Set([
-  "a",
-  "an",
-  "the",
-  "and",
-  "or",
-  "for",
-  "with",
-  "to",
-  "in",
-  "on",
-  "at",
-  "of",
-  "is",
-  "are",
-  "was",
-  "be",
-  "been",
-  "being",
-  "have",
-  "has",
-  "had",
-  "do",
-  "does",
-  "did",
-  "will",
-  "would",
-  "could",
-  "should",
-  "may",
-  "might",
-  "must",
-  "can",
-  "i",
-  "we",
-  "you",
-  "they",
-  "he",
-  "she",
-  "it",
-  "my",
-  "your",
-  "our",
-  "their",
-  "this",
-  "that",
-  "these",
-  "those",
-  "from",
-  "as",
-  "by",
-  "about",
-  "into",
-  "through",
-  "during",
-  "before",
-  "after",
-  "above",
-  "below",
-  "between",
-  "under",
-  "again",
-  "further",
-  "then",
-  "once",
-  "here",
-  "there",
-  "when",
-  "where",
-  "why",
-  "how",
-  "all",
-  "each",
-  "few",
-  "more",
-  "most",
-  "other",
-  "some",
-  "such",
-  "no",
-  "nor",
-  "not",
-  "only",
-  "own",
-  "same",
-  "so",
-  "than",
-  "too",
-  "very",
-  "just",
-  "also",
-  "offer",
-  "offering",
-  "provide",
-  "providing",
-  "work",
-  "working",
-  "services",
-  "service",
-]);
+const SYNONYMS: Record<string, string[]> = {
+  editor: ["editor", "edição", "editar", "montagem", "corte", "video editor", "video editing"],
+  vídeo: ["video", "vídeo", "reels", "shorts", "youtube", "tiktok"],
+  designer: ["designer", "design", "gráfico", "identidade visual", "logo", "branding"],
+  dev: ["desenvolvedor", "developer", "programador", "programar", "código", "software"],
+  site: ["site", "website", "landing page", "web", "frontend"],
+  social: ["social media", "instagram", "redes sociais", "conteúdo", "marketing"],
+  copy: ["copywriter", "copy", "texto", "redator", "conteúdo", "escrita"],
+  foto: ["fotógrafo", "fotografia", "fotos", "photo"],
+  tradutor: ["tradutor", "tradução", "translate", "translation"],
+};
 
-function getStopWords(region: SearchRegion): Set<string> {
-  if (region === "brasil") return STOP_WORDS_PT;
-  if (region === "internacional") return STOP_WORDS_EN;
-  return new Set([...STOP_WORDS_PT, ...STOP_WORDS_EN]);
-}
-
-export function extractSearchQuery(
-  service: string,
-  region: SearchRegion,
-): string {
-  const stopWords = getStopWords(region);
-
-  const words = service
+export function extractKeywords(servico: string, regiao: string): string[] {
+  const normalized = servico
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .split(/\W+/)
-    .filter((word) => word.length > 2 && !stopWords.has(word));
+    .replace(/[^a-z0-9\s]/g, " ");
 
-  const unique = [...new Set(words)].slice(0, 6);
-  return unique.join(" ") || service.trim().slice(0, 80);
+  const words = normalized
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+
+  const keywords = new Set<string>();
+
+  for (const word of words) {
+    keywords.add(word);
+    for (const [key, syns] of Object.entries(SYNONYMS)) {
+      if (word.includes(key) || key.includes(word)) {
+        syns.forEach((s) => keywords.add(s));
+      }
+    }
+  }
+
+  if (regiao === "brasil") {
+    keywords.add("contratar");
+    keywords.add("preciso");
+    keywords.add("busco");
+    keywords.add("procuro");
+    keywords.add("freelancer");
+  } else {
+    keywords.add("hiring");
+    keywords.add("for hire");
+    keywords.add("need");
+    keywords.add("looking for");
+  }
+
+  return Array.from(keywords).slice(0, 8);
 }
 
-export function buildSubredditSearchUrls(
-  query: string,
-  region: SearchRegion,
-): { url: string }[] {
-  const encoded = encodeURIComponent(query);
-  const subreddits = getSubredditsForRegion(region);
-
-  return subreddits.map((subreddit) => ({
-    url: `https://www.reddit.com/r/${subreddit}/search/?q=${encoded}&restrict_sr=1&sort=new&t=month`,
-  }));
-}
-
-/** Palavras/frases de contratação em português. */
-const HIRING_TITLE_KEYWORDS_PT = [
-  "quero contratar",
-  "contratar",
-  "procuro",
-  "preciso",
-  "busco",
-  "vaga",
-  "freelancer",
-  "contratacao",
-  "contratação",
-] as const;
-
-/** Palavras/frases de contratação em inglês. */
-const HIRING_TITLE_KEYWORDS_EN = [
-  "for hire",
-  "looking for",
-  "hiring",
-  "need",
-  "freelancer",
-  "seeking",
-  "wanted",
-] as const;
-
-/** Marcadores de título em português (palavra inteira). */
-const PORTUGUESE_TITLE_MARKERS = [
-  "de",
-  "para",
-  "com",
-  "que",
-  "nao",
-  "um",
-  "uma",
-  "preciso",
-  "busco",
-  "quero",
-] as const;
-
-function normalizeForMatch(text: string): string {
-  return text
+export function hasHiringKeywordsInTitle(title: string, regiao = "internacional"): boolean {
+  const t = title
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+
+  if (regiao === "brasil") {
+    const ptKeywords = [
+      "contratar", "contratando", "preciso", "procuro", "busco",
+      "quero contratar", "vaga", "freelancer", "oportunidade",
+      "precisamos", "buscamos", "procuramos",
+    ];
+    return ptKeywords.some((k) => t.includes(k));
+  }
+
+  const enKeywords = [
+    "hiring", "for hire", "need", "looking for", "want", "seeking",
+    "wanted", "required", "job", "opportunity", "commission",
+  ];
+  return enKeywords.some((k) => t.includes(k));
 }
 
-function getTitleWords(title: string): Set<string> {
-  const words = normalizeForMatch(title).split(/\W+/).filter(Boolean);
-  return new Set(words);
-}
-
-/** Título parece estar em português (contém marcadores comuns). */
 export function hasPortugueseMarkersInTitle(title: string): boolean {
-  const words = getTitleWords(title);
-  return PORTUGUESE_TITLE_MARKERS.some((marker) =>
-    words.has(normalizeForMatch(marker)),
-  );
-}
+  const t = title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
-/** Retorna true se o título contém palavra de contratação da região. */
-export function hasHiringKeywordsInTitle(
-  title: string,
-  region: SearchRegion = "ambos",
-): boolean {
-  const normalized = normalizeForMatch(title);
-
-  const keywords =
-    region === "brasil"
-      ? HIRING_TITLE_KEYWORDS_PT
-      : region === "internacional"
-        ? HIRING_TITLE_KEYWORDS_EN
-        : [...HIRING_TITLE_KEYWORDS_PT, ...HIRING_TITLE_KEYWORDS_EN];
-
-  return keywords.some((keyword) =>
-    normalized.includes(normalizeForMatch(keyword)),
-  );
+  const ptMarkers = [
+    "de", "para", "com", "que", "nao", "um", "uma", "preciso",
+    "busco", "quero", "como", "meu", "minha", "nosso", "nossa",
+  ];
+  return ptMarkers.some((m) => t.split(/\s+/).includes(m));
 }

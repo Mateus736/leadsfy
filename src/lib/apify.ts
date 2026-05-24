@@ -1,215 +1,114 @@
-import { buildSubredditSearchUrls, extractSearchQuery } from "@/lib/keywords";
-import { isPostFromRegionSubreddit, type SearchRegion } from "@/lib/regions";
-import {
-  dedupeLeads,
-  mapPostToLead,
-  type ApifyRedditPost,
-} from "@/lib/reddit-leads";
-import type { LeadResult } from "@/lib/mock-leads";
-
-const ACTOR_ID = "trudax~reddit-scraper-lite";
+const ACTOR_ID = "trudax/reddit-scraper-lite";
 
 export type ApifyJobStatus =
   | { status: "running" }
-  | {
-      status: "completed";
-      leads: LeadResult[];
-      total: number;
-      subreddits: string;
-    }
+  | { status: "completed"; leads: LeadResult[]; total: number; subreddits: string }
   | { status: "failed"; error: string };
 
-type ApifyRun = {
+export type ApifyRun = {
   id?: string;
   status?: string;
   defaultDatasetId?: string;
 };
 
-type ApifyRunResponse = {
+export type ApifyRunResponse = {
   data?: ApifyRun;
 };
 
-function normalizeApiKey(apiKey: string): string {
-  return apiKey.trim().replace(/^['"]|['"]$/g, "");
-}
+import type { LeadResult } from "@/lib/reddit-leads";
+import { mapPostToLead } from "@/lib/reddit-leads";
+import { getSubredditsForRegion } from "@/lib/regions";
+import { extractKeywords } from "@/lib/keywords";
 
-function apifyUrl(path: string, apiKey: string): string {
-  const base = `https://api.apify.com/v2${path}`;
-  const separator = base.includes("?") ? "&" : "?";
-  return `${base}${separator}token=${encodeURIComponent(normalizeApiKey(apiKey))}`;
-}
-
-function apifyHeaders(apiKey: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${normalizeApiKey(apiKey)}`,
-    "Content-Type": "application/json",
-  };
-}
-
-function buildActorInput(serviceDescription: string, region: SearchRegion) {
-  const query = extractSearchQuery(serviceDescription, region);
-  const startUrls = buildSubredditSearchUrls(query, region);
-
-  return {
-    startUrls,
-    maxItems: 45,
-    maxPostCount: 15,
-    maxComments: 0,
-    maxCommunitiesCount: 0,
-    maxUserCount: 0,
-    scrollTimeout: 40,
-    proxy: {
-      useApifyProxy: true,
-    },
-  };
-}
-
-/** Inicia run no Apify sem aguardar conclusão. Retorna o run ID (job_id). */
 export async function startRedditSearchJob(
-  serviceDescription: string,
-  apiKey: string,
-  region: SearchRegion,
+  servico: string,
+  regiao: string
 ): Promise<string> {
-  const input = buildActorInput(serviceDescription, region);
-  const runUrl = apifyUrl(`/acts/${ACTOR_ID}/runs`, apiKey);
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error("APIFY_API_KEY não configurada.");
 
-  const response = await fetch(runUrl, {
-    method: "POST",
-    headers: apifyHeaders(apiKey),
-    body: JSON.stringify(input),
-  });
+  const subreddits = getSubredditsForRegion(regiao);
+  const keywords = extractKeywords(servico, regiao);
+  const urls = subreddits.flatMap((sub) =>
+    keywords.map(
+      (kw) =>
+        `https://www.reddit.com/r/${sub}/search/?q=${encodeURIComponent(kw)}&sort=new&t=month`
+    )
+  );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw apifyHttpError(response.status, errorText);
+  const body = {
+    startUrls: urls.slice(0, 10).map((url) => ({ url })),
+    maxItems: 50,
+    skipComments: true,
+    skipUserPosts: false,
+    skipCommunity: true,
+  };
+
+  const res = await fetch(
+    `https://api.apify.com/v2/acts/${ACTOR_ID}/runs?token=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Apify start failed (${res.status}): ${text.slice(0, 300)}`);
   }
 
-  const json = (await response.json()) as ApifyRunResponse;
+  const json: ApifyRunResponse = await res.json();
   const runId = json.data?.id;
-
-  if (!runId) {
-    throw new Error("Apify não retornou o ID do run.");
-  }
-
+  if (!runId) throw new Error("Apify não retornou run ID.");
   return runId;
 }
 
-/** Consulta status do run e retorna leads quando concluído. */
 export async function getRedditSearchJobStatus(
-  jobId: string,
-  apiKey: string,
-  serviceDescription: string,
-  region: SearchRegion,
-  subredditsLabel: string,
+  runId: string,
+  servico: string,
+  regiao: string
 ): Promise<ApifyJobStatus> {
-  const runUrl = apifyUrl(`/actor-runs/${jobId}`, apiKey);
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error("APIFY_API_KEY não configurada.");
 
-  const response = await fetch(runUrl, {
-    headers: { Authorization: `Bearer ${normalizeApiKey(apiKey)}` },
-    cache: "no-store",
-  });
+  const runRes = await fetch(
+    `https://api.apify.com/v2/actor-runs/${runId}?token=${apiKey}`
+  );
+  if (!runRes.ok) throw new Error(`Apify run status failed (${runRes.status})`);
+  const runJson: ApifyRunResponse = await runRes.json();
+  const status = runJson.data?.status;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw apifyHttpError(response.status, errorText);
-  }
-
-  const json = (await response.json()) as ApifyRunResponse;
-  const run = json.data;
-  const runStatus = run?.status ?? "UNKNOWN";
-
-  if (runStatus === "RUNNING" || runStatus === "READY") {
+  if (status === "RUNNING" || status === "READY" || status === "STARTING") {
     return { status: "running" };
   }
 
-  if (
-    runStatus === "FAILED" ||
-    runStatus === "ABORTED" ||
-    runStatus === "TIMED-OUT"
-  ) {
-    return {
-      status: "failed",
-      error: `Busca no Reddit falhou (status: ${runStatus}).`,
-    };
+  if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+    return { status: "failed", error: `Run ${status}` };
   }
 
-  if (runStatus !== "SUCCEEDED") {
-    return {
-      status: "failed",
-      error: `Status inesperado do Apify: ${runStatus}`,
-    };
-  }
+  const datasetId = runJson.data?.defaultDatasetId;
+  if (!datasetId) return { status: "failed", error: "Sem dataset ID" };
 
-  if (!run?.defaultDatasetId) {
-    return {
-      status: "failed",
-      error: "Run concluído sem dataset de resultados.",
-    };
-  }
-
-  const items = await fetchDatasetItems(run.defaultDatasetId, apiKey);
-
-  const scopedItems = items.filter((item) =>
-    isPostFromRegionSubreddit(
-      item.communityName,
-      region,
-      item.parsedCommunityName,
-    ),
+  const dataRes = await fetch(
+    `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apiKey}&limit=100`
   );
+  if (!dataRes.ok) throw new Error(`Apify dataset failed (${dataRes.status})`);
+  const posts = await dataRes.json();
 
-  const leads = scopedItems
-    .map((item) => mapPostToLead(item, serviceDescription, region))
-    .filter((lead): lead is LeadResult => lead !== null);
-
-  const deduped = dedupeLeads(leads).slice(0, 20);
+  const subreddits = getSubredditsForRegion(regiao);
+  const leads: LeadResult[] = posts
+    .map((p: Record<string, unknown>) => mapPostToLead(p, regiao))
+    .filter((l: LeadResult | null): l is LeadResult => l !== null)
+    .filter((l: LeadResult) => {
+      const sub = l.subreddit?.replace("r/", "").toLowerCase();
+      return subreddits.includes(sub);
+    });
 
   return {
     status: "completed",
-    leads: deduped,
-    total: deduped.length,
-    subreddits: subredditsLabel,
+    leads,
+    total: leads.length,
+    subreddits: subreddits.join(", "),
   };
-}
-
-async function fetchDatasetItems(
-  datasetId: string,
-  apiKey: string,
-): Promise<ApifyRedditPost[]> {
-  const url = apifyUrl(`/datasets/${datasetId}/items?limit=50`, apiKey);
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${normalizeApiKey(apiKey)}` },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw apifyHttpError(response.status, errorText);
-  }
-
-  return parseDatasetItems(await response.json());
-}
-
-function parseDatasetItems(payload: unknown): ApifyRedditPost[] {
-  if (Array.isArray(payload)) return payload as ApifyRedditPost[];
-
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "items" in payload &&
-    Array.isArray((payload as { items: unknown }).items)
-  ) {
-    return (payload as { items: ApifyRedditPost[] }).items;
-  }
-
-  return [];
-}
-
-function apifyHttpError(status: number, body: string): Error {
-  if (status === 401) {
-    return new Error(
-      "Apify retornou 401 (não autorizado). Verifique se APIFY_API_KEY em .env.local é o token pessoal correto (apify_api_...) e reinicie o servidor.",
-    );
-  }
-  return new Error(`Apify HTTP ${status}: ${body.slice(0, 300)}`);
 }
