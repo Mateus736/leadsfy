@@ -1,5 +1,5 @@
 import { buildSubredditSearchUrls, extractSearchQuery } from "@/lib/keywords";
-import type { SearchRegion } from "@/lib/regions";
+import { isPostFromRegionSubreddit, type SearchRegion } from "@/lib/regions";
 import {
   dedupeLeads,
   mapPostToLead,
@@ -148,8 +148,17 @@ export async function getRedditSearchJobStatus(
   }
 
   const items = await fetchDatasetItems(run.defaultDatasetId, apiKey);
-  const leads = items
-    .map((item) => mapPostToLead(item, serviceDescription))
+
+  const scopedItems = items.filter((item) =>
+    isPostFromRegionSubreddit(
+      item.communityName,
+      region,
+      item.parsedCommunityName,
+    ),
+  );
+
+  const leads = scopedItems
+    .map((item) => mapPostToLead(item, serviceDescription, region))
     .filter((lead): lead is LeadResult => lead !== null);
 
   const deduped = dedupeLeads(leads).slice(0, 20);

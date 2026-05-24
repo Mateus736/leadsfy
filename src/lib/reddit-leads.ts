@@ -1,5 +1,12 @@
 import type { LeadResult, Urgency } from "@/lib/mock-leads";
-import { hasHiringKeywordsInTitle } from "@/lib/keywords";
+import {
+  hasHiringKeywordsInTitle,
+  hasPortugueseMarkersInTitle,
+} from "@/lib/keywords";
+import {
+  isPostFromRegionSubreddit,
+  type SearchRegion,
+} from "@/lib/regions";
 
 export type ApifyRedditPost = {
   id?: string;
@@ -7,6 +14,7 @@ export type ApifyRedditPost = {
   url?: string;
   title?: string;
   communityName?: string;
+  parsedCommunityName?: string;
   body?: string;
   upVotes?: number;
   numberOfComments?: number;
@@ -17,13 +25,26 @@ export type ApifyRedditPost = {
 export function mapPostToLead(
   post: ApifyRedditPost,
   serviceDescription: string,
+  region: SearchRegion = "ambos",
 ): LeadResult | null {
   if (post.dataType && post.dataType !== "post") return null;
   if (!post.title || !post.url) return null;
 
+  if (
+    !isPostFromRegionSubreddit(
+      post.communityName,
+      region,
+      post.parsedCommunityName,
+    )
+  ) {
+    return null;
+  }
+
   const title = post.title.trim();
 
-  if (!hasHiringKeywordsInTitle(title)) return null;
+  if (region === "brasil" && !hasPortugueseMarkersInTitle(title)) return null;
+
+  if (!hasHiringKeywordsInTitle(title, region)) return null;
 
   const id = post.parsedId ?? post.id ?? post.url;
   const subreddit = post.communityName ?? "r/unknown";

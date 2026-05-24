@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     }
 
     const regiao = parseSearchRegion(body.regiao ?? body.region);
+    const subreddits = formatSubredditList(regiao);
     const jobId = await startRedditSearchJob(servico, apiKey, regiao);
 
     return NextResponse.json({
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       status: "running",
       query: servico,
       regiao,
-      subreddits: formatSubredditList(regiao),
+      subreddits,
     });
   } catch (error) {
     console.error("[api/buscar]", error);

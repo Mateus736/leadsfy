@@ -41,9 +41,48 @@ export function parseSearchRegion(value: unknown): SearchRegion {
   return "brasil";
 }
 
+export const BRAZIL_SUBREDDITS = [
+  "brdev",
+  "empreendedorismo",
+  "designers",
+  "freelancers",
+] as const;
+
+export const INTERNATIONAL_SUBREDDITS = [
+  "forhire",
+  "hireadev",
+  "forhiredesign",
+] as const;
+
 export function getSubredditsForRegion(region: SearchRegion): string[] {
-  const config = SEARCH_REGIONS.find((r) => r.value === region);
-  return config?.subreddits ?? SEARCH_REGIONS[0].subreddits;
+  if (region === "brasil") return [...BRAZIL_SUBREDDITS];
+  if (region === "internacional") return [...INTERNATIONAL_SUBREDDITS];
+  return [...BRAZIL_SUBREDDITS, ...INTERNATIONAL_SUBREDDITS];
+}
+
+export function normalizeSubredditName(
+  communityName: string | undefined,
+): string | null {
+  if (!communityName) return null;
+  const name = communityName.trim().toLowerCase().replace(/^r\//, "");
+  return name.length > 0 ? name : null;
+}
+
+/** Garante que o post veio de um subreddit da região selecionada. */
+export function isPostFromRegionSubreddit(
+  communityName: string | undefined,
+  region: SearchRegion,
+  parsedCommunityName?: string,
+): boolean {
+  const subreddit =
+    normalizeSubredditName(communityName) ??
+    normalizeSubredditName(parsedCommunityName);
+  if (!subreddit) return false;
+
+  const allowed = new Set(
+    getSubredditsForRegion(region).map((s) => s.toLowerCase()),
+  );
+  return allowed.has(subreddit);
 }
 
 export function getRegionLabel(region: SearchRegion): string {

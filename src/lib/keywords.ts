@@ -1,7 +1,4 @@
-import {
-  getSubredditsForRegion,
-  type SearchRegion,
-} from "@/lib/regions";
+import { getSubredditsForRegion, type SearchRegion } from "@/lib/regions";
 
 const STOP_WORDS_PT = new Set([
   "a",
@@ -186,19 +183,42 @@ export function buildSubredditSearchUrls(
   }));
 }
 
-/** Palavras/frases que indicam intenção de contratação (título do post). */
-const HIRING_TITLE_KEYWORDS = [
+/** Palavras/frases de contratação em português. */
+const HIRING_TITLE_KEYWORDS_PT = [
   "quero contratar",
-  "for hire",
-  "looking for",
   "contratar",
   "procuro",
   "preciso",
-  "hiring",
-  "need",
   "busco",
   "vaga",
   "freelancer",
+  "contratacao",
+  "contratação",
+] as const;
+
+/** Palavras/frases de contratação em inglês. */
+const HIRING_TITLE_KEYWORDS_EN = [
+  "for hire",
+  "looking for",
+  "hiring",
+  "need",
+  "freelancer",
+  "seeking",
+  "wanted",
+] as const;
+
+/** Marcadores de título em português (palavra inteira). */
+const PORTUGUESE_TITLE_MARKERS = [
+  "de",
+  "para",
+  "com",
+  "que",
+  "nao",
+  "um",
+  "uma",
+  "preciso",
+  "busco",
+  "quero",
 ] as const;
 
 function normalizeForMatch(text: string): string {
@@ -208,10 +228,34 @@ function normalizeForMatch(text: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-/** Retorna true se o título contém alguma palavra de contratação. */
-export function hasHiringKeywordsInTitle(title: string): boolean {
+function getTitleWords(title: string): Set<string> {
+  const words = normalizeForMatch(title).split(/\W+/).filter(Boolean);
+  return new Set(words);
+}
+
+/** Título parece estar em português (contém marcadores comuns). */
+export function hasPortugueseMarkersInTitle(title: string): boolean {
+  const words = getTitleWords(title);
+  return PORTUGUESE_TITLE_MARKERS.some((marker) =>
+    words.has(normalizeForMatch(marker)),
+  );
+}
+
+/** Retorna true se o título contém palavra de contratação da região. */
+export function hasHiringKeywordsInTitle(
+  title: string,
+  region: SearchRegion = "ambos",
+): boolean {
   const normalized = normalizeForMatch(title);
-  return HIRING_TITLE_KEYWORDS.some((keyword) =>
+
+  const keywords =
+    region === "brasil"
+      ? HIRING_TITLE_KEYWORDS_PT
+      : region === "internacional"
+        ? HIRING_TITLE_KEYWORDS_EN
+        : [...HIRING_TITLE_KEYWORDS_PT, ...HIRING_TITLE_KEYWORDS_EN];
+
+  return keywords.some((keyword) =>
     normalized.includes(normalizeForMatch(keyword)),
   );
 }
