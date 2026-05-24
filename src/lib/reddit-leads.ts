@@ -1,4 +1,5 @@
 import type { LeadResult, Urgency } from "@/lib/mock-leads";
+import { hasHiringKeywordsInTitle } from "@/lib/keywords";
 
 export type ApifyRedditPost = {
   id?: string;
@@ -13,9 +14,6 @@ export type ApifyRedditPost = {
   dataType?: string;
 };
 
-const HIRING_PATTERNS =
-  /hiring|hire|preciso|procuro|looking for|need a|freelancer|contratar|orcamento|orçamento|busco|seeking|wanted/i;
-
 export function mapPostToLead(
   post: ApifyRedditPost,
   serviceDescription: string,
@@ -24,6 +22,8 @@ export function mapPostToLead(
   if (!post.title || !post.url) return null;
 
   const title = post.title.trim();
+
+  if (!hasHiringKeywordsInTitle(title)) return null;
 
   const id = post.parsedId ?? post.id ?? post.url;
   const subreddit = post.communityName ?? "r/unknown";
@@ -36,10 +36,6 @@ export function mapPostToLead(
     redditUrl: post.url,
     suggestedMessage: buildSuggestedMessage(serviceDescription, title),
   };
-}
-
-export function isHiringLead(text: string): boolean {
-  return HIRING_PATTERNS.test(text);
 }
 
 function calculateUrgency(post: ApifyRedditPost): Urgency {

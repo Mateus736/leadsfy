@@ -2,7 +2,6 @@ import { buildSubredditSearchUrls, extractSearchQuery } from "@/lib/keywords";
 import type { SearchRegion } from "@/lib/regions";
 import {
   dedupeLeads,
-  isHiringLead,
   mapPostToLead,
   type ApifyRedditPost,
 } from "@/lib/reddit-leads";
@@ -63,13 +62,7 @@ export async function searchRedditLeads(
     .map((item) => mapPostToLead(item, serviceDescription))
     .filter((lead): lead is LeadResult => lead !== null);
 
-  const deduped = dedupeLeads(allLeads);
-  const hiringLeads = deduped.filter((lead) =>
-    isHiringLead(`${lead.title}`),
-  );
-
-  const leads = hiringLeads.length >= 3 ? hiringLeads : deduped;
-  return leads.slice(0, 20);
+  return dedupeLeads(allLeads).slice(0, 20);
 }
 
 async function runActorAndGetItems(

@@ -185,3 +185,33 @@ export function buildSubredditSearchUrls(
     url: `https://www.reddit.com/r/${subreddit}/search/?q=${encoded}&restrict_sr=1&sort=new&t=month`,
   }));
 }
+
+/** Palavras/frases que indicam intenção de contratação (título do post). */
+const HIRING_TITLE_KEYWORDS = [
+  "quero contratar",
+  "for hire",
+  "looking for",
+  "contratar",
+  "procuro",
+  "preciso",
+  "hiring",
+  "need",
+  "busco",
+  "vaga",
+  "freelancer",
+] as const;
+
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Retorna true se o título contém alguma palavra de contratação. */
+export function hasHiringKeywordsInTitle(title: string): boolean {
+  const normalized = normalizeForMatch(title);
+  return HIRING_TITLE_KEYWORDS.some((keyword) =>
+    normalized.includes(normalizeForMatch(keyword)),
+  );
+}
