@@ -8,13 +8,31 @@ import {
 import type { LeadResult } from "@/lib/mock-leads";
 
 const ACTOR_ID = "trudax~reddit-scraper-lite";
-const SYNC_TIMEOUT_SECS = 180;
+
+export type ApifyJobStatus =
+  | { status: "running" }
+  | {
+      status: "completed";
+      leads: LeadResult[];
+      total: number;
+      subreddits: string;
+    }
+  | { status: "failed"; error: string };
+
+type ApifyRun = {
+  id?: string;
+  status?: string;
+  defaultDatasetId?: string;
+};
+
+type ApifyRunResponse = {
+  data?: ApifyRun;
+};
 
 function normalizeApiKey(apiKey: string): string {
   return apiKey.trim().replace(/^['"]|['"]$/g, "");
 }
 
-/** Apify aceita ?token= na URL (forma mais compatível) e Bearer no header. */
 function apifyUrl(path: string, apiKey: string): string {
   const base = `https://api.apify.com/v2${path}`;
   const separator = base.includes("?") ? "&" : "?";
@@ -28,22 +46,11 @@ function apifyHeaders(apiKey: string): HeadersInit {
   };
 }
 
-type ApifyRunResponse = {
-  data?: {
-    status?: string;
-    defaultDatasetId?: string;
-  };
-};
-
-export async function searchRedditLeads(
-  serviceDescription: string,
-  apiKey: string,
-  region: SearchRegion,
-): Promise<LeadResult[]> {
+function buildActorInput(serviceDescription: string, region: SearchRegion) {
   const query = extractSearchQuery(serviceDescription, region);
   const startUrls = buildSubredditSearchUrls(query, region);
 
-  const actorInput = {
+  return {
     startUrls,
     maxItems: 45,
     maxPostCount: 15,
@@ -55,90 +62,104 @@ export async function searchRedditLeads(
       useApifyProxy: true,
     },
   };
+}
 
-  const items = await runActorAndGetItems(actorInput, apiKey);
+/** Inicia run no Apify sem aguardar conclusão. Retorna o run ID (job_id). */
+export async function startRedditSearchJob(
+  serviceDescription: string,
+  apiKey: string,
+  region: SearchRegion,
+): Promise<string> {
+  const input = buildActorInput(serviceDescription, region);
+  const runUrl = apifyUrl(`/acts/${ACTOR_ID}/runs`, apiKey);
 
-  const allLeads = items
+  const response = await fetch(runUrl, {
+    method: "POST",
+    headers: apifyHeaders(apiKey),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw apifyHttpError(response.status, errorText);
+  }
+
+  const json = (await response.json()) as ApifyRunResponse;
+  const runId = json.data?.id;
+
+  if (!runId) {
+    throw new Error("Apify não retornou o ID do run.");
+  }
+
+  return runId;
+}
+
+/** Consulta status do run e retorna leads quando concluído. */
+export async function getRedditSearchJobStatus(
+  jobId: string,
+  apiKey: string,
+  serviceDescription: string,
+  region: SearchRegion,
+  subredditsLabel: string,
+): Promise<ApifyJobStatus> {
+  const runUrl = apifyUrl(`/actor-runs/${jobId}`, apiKey);
+
+  const response = await fetch(runUrl, {
+    headers: { Authorization: `Bearer ${normalizeApiKey(apiKey)}` },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw apifyHttpError(response.status, errorText);
+  }
+
+  const json = (await response.json()) as ApifyRunResponse;
+  const run = json.data;
+  const runStatus = run?.status ?? "UNKNOWN";
+
+  if (runStatus === "RUNNING" || runStatus === "READY") {
+    return { status: "running" };
+  }
+
+  if (
+    runStatus === "FAILED" ||
+    runStatus === "ABORTED" ||
+    runStatus === "TIMED-OUT"
+  ) {
+    return {
+      status: "failed",
+      error: `Busca no Reddit falhou (status: ${runStatus}).`,
+    };
+  }
+
+  if (runStatus !== "SUCCEEDED") {
+    return {
+      status: "failed",
+      error: `Status inesperado do Apify: ${runStatus}`,
+    };
+  }
+
+  if (!run?.defaultDatasetId) {
+    return {
+      status: "failed",
+      error: "Run concluído sem dataset de resultados.",
+    };
+  }
+
+  const items = await fetchDatasetItems(run.defaultDatasetId, apiKey);
+  const leads = items
     .map((item) => mapPostToLead(item, serviceDescription))
     .filter((lead): lead is LeadResult => lead !== null);
 
-  return dedupeLeads(allLeads).slice(0, 20);
-}
+  const deduped = dedupeLeads(leads).slice(0, 20);
 
-async function runActorAndGetItems(
-  input: Record<string, unknown>,
-  apiKey: string,
-): Promise<ApifyRedditPost[]> {
-  const syncUrl = apifyUrl(
-    `/acts/${ACTOR_ID}/run-sync-get-dataset-items?timeout=${SYNC_TIMEOUT_SECS}`,
-    apiKey,
-  );
-
-  const syncResponse = await fetch(syncUrl, {
-    method: "POST",
-    headers: apifyHeaders(apiKey),
-    body: JSON.stringify(input),
-  });
-
-  if (syncResponse.ok) {
-    return parseDatasetItems(await syncResponse.json());
-  }
-
-  if (syncResponse.status !== 408 && syncResponse.status !== 504) {
-    const errorText = await syncResponse.text();
-    throw apifyHttpError(syncResponse.status, errorText);
-  }
-
-  return runActorAsync(input, apiKey);
-}
-
-async function runActorAsync(
-  input: Record<string, unknown>,
-  apiKey: string,
-): Promise<ApifyRedditPost[]> {
-  const runUrl = apifyUrl(`/acts/${ACTOR_ID}/runs?waitForFinish=60`, apiKey);
-
-  const runResponse = await fetch(runUrl, {
-    method: "POST",
-    headers: apifyHeaders(apiKey),
-    body: JSON.stringify(input),
-  });
-
-  if (!runResponse.ok) {
-    const errorText = await runResponse.text();
-    throw apifyHttpError(runResponse.status, errorText);
-  }
-
-  const runJson = (await runResponse.json()) as ApifyRunResponse;
-  const run = runJson.data;
-
-  if (!run?.defaultDatasetId) {
-    throw new Error("Apify não retornou dataset do run.");
-  }
-
-  if (run.status === "RUNNING" || run.status === "READY") {
-    return pollDataset(run.defaultDatasetId, apiKey, 24);
-  }
-
-  if (run.status !== "SUCCEEDED") {
-    throw new Error(`Apify run terminou com status: ${run.status ?? "desconhecido"}`);
-  }
-
-  return fetchDatasetItems(run.defaultDatasetId, apiKey);
-}
-
-async function pollDataset(
-  datasetId: string,
-  apiKey: string,
-  attempts: number,
-): Promise<ApifyRedditPost[]> {
-  for (let i = 0; i < attempts; i++) {
-    await sleep(5000);
-    const items = await fetchDatasetItems(datasetId, apiKey);
-    if (items.length > 0) return items;
-  }
-
-  return fetchDatasetItems(datasetId, apiKey);
+  return {
+    status: "completed",
+    leads: deduped,
+    total: deduped.length,
+    subreddits: subredditsLabel,
+  };
 }
 
 async function fetchDatasetItems(
@@ -149,6 +170,7 @@ async function fetchDatasetItems(
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${normalizeApiKey(apiKey)}` },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -172,10 +194,6 @@ function parseDatasetItems(payload: unknown): ApifyRedditPost[] {
   }
 
   return [];
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function apifyHttpError(status: number, body: string): Error {

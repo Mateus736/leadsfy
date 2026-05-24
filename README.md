@@ -19,7 +19,9 @@ Abra [http://localhost:3000](http://localhost:3000) no navegador.
 | --- | --- |
 | `APIFY_API_KEY` | Token da [Apify Console](https://console.apify.com/account#/integrations) para buscar posts no Reddit |
 
-A busca usa o ator [trudax/reddit-scraper-lite](https://apify.com/trudax/reddit-scraper-lite). No dashboard você escolhe a região:
+A busca usa o ator [trudax/reddit-scraper-lite](https://apify.com/trudax/reddit-scraper-lite) de forma **assíncrona** (evita timeout na Vercel): `POST /api/buscar` inicia o run e retorna `jobId`; o dashboard faz polling em `GET /api/status/[jobId]` a cada 5s até concluir.
+
+No dashboard você escolhe a região:
 
 - **Brasil:** r/brdev, r/empreendedorismo, r/designers, r/freelancers
 - **Internacional:** r/forhire, r/hireadev, r/forhiredesign

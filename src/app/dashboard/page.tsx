@@ -45,6 +45,8 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!service.trim() || isLoading) return;
 
+    const servico = service.trim();
+
     setIsLoading(true);
     setError(null);
     setHasSearched(true);
@@ -52,19 +54,58 @@ export default function DashboardPage() {
     setResults([]);
 
     try {
-      const response = await fetch("/api/buscar", {
+      const startResponse = await fetch("/api/buscar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ servico: service.trim(), regiao: region }),
+        body: JSON.stringify({ servico, regiao: region }),
       });
 
-      const data = await response.json();
+      const startData = await startResponse.json();
 
-      if (!response.ok) {
-        throw new Error(data.error ?? "Não foi possível buscar leads.");
+      if (!startResponse.ok) {
+        throw new Error(startData.error ?? "Não foi possível iniciar a busca.");
       }
 
-      setResults(data.leads ?? []);
+      const jobId = startData.jobId as string;
+      if (!jobId) {
+        throw new Error("Resposta inválida: jobId ausente.");
+      }
+
+      const params = new URLSearchParams({
+        servico,
+        regiao: region,
+      });
+
+      const pollIntervalMs = 5000;
+      const maxAttempts = 60;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        }
+
+        const statusResponse = await fetch(
+          `/api/status/${jobId}?${params.toString()}`,
+        );
+        const statusData = await statusResponse.json();
+
+        if (!statusResponse.ok) {
+          throw new Error(statusData.error ?? "Erro ao consultar status.");
+        }
+
+        if (statusData.status === "completed") {
+          setResults(statusData.leads ?? []);
+          return;
+        }
+
+        if (statusData.status === "failed") {
+          throw new Error(statusData.error ?? "A busca no Reddit falhou.");
+        }
+      }
+
+      throw new Error(
+        "A busca demorou mais que o esperado. Tente novamente em alguns minutos.",
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Erro inesperado ao buscar leads.",
@@ -186,8 +227,8 @@ export default function DashboardPage() {
 
             {isLoading && (
               <p className="mt-6 text-sm text-muted">
-                Buscando posts em {formatSubredditList(region)}... Isso pode
-                levar até 2 minutos.
+                Buscando posts em {formatSubredditList(region)}... A consulta
+                roda em segundo plano e pode levar alguns minutos.
               </p>
             )}
 

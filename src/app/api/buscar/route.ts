@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { searchRedditLeads } from "@/lib/apify";
+import { startRedditSearchJob } from "@/lib/apify";
 import { getApifyApiKey, validateApifyApiKey } from "@/lib/env";
 import { formatSubredditList, parseSearchRegion } from "@/lib/regions";
-
-export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -40,15 +38,14 @@ export async function POST(request: Request) {
     }
 
     const regiao = parseSearchRegion(body.regiao ?? body.region);
-
-    const leads = await searchRedditLeads(servico, apiKey, regiao);
+    const jobId = await startRedditSearchJob(servico, apiKey, regiao);
 
     return NextResponse.json({
-      leads,
+      jobId,
+      status: "running",
       query: servico,
       regiao,
       subreddits: formatSubredditList(regiao),
-      total: leads.length,
     });
   } catch (error) {
     console.error("[api/buscar]", error);
@@ -56,7 +53,7 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error
         ? error.message
-        : "Erro ao buscar leads no Reddit.";
+        : "Erro ao iniciar busca no Reddit.";
 
     return NextResponse.json({ error: message }, { status: 502 });
   }
