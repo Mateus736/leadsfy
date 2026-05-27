@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [service, setService] = useState("");
-  const [region, setRegion] = useState<SearchRegion>("brasil");
+  const [region, setRegion] = useState<SearchRegion>("internacional");
   const [results, setResults] = useState<LeadResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
