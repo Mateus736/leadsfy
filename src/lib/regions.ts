@@ -36,3 +36,27 @@ export function parseSearchRegion(value: unknown): SearchRegion {
   if (value === "internacional" || value === "ambos") return value;
   return "internacional";
 }
+
+export function isPostFromRegionSubreddit(
+  communityName?: string,
+  region: SearchRegion = "ambos",
+  parsedCommunityName?: string,
+): boolean {
+  const subreddit = (
+    parsedCommunityName ||
+    communityName ||
+    ""
+  ).toLowerCase();
+
+  const allowed = getSubredditsForRegion(region);
+
+  return allowed.some(
+    (name) => subreddit === name.toLowerCase()
+  );
+}
+
+export function formatSubredditList(region: SearchRegion): string {
+  return getSubredditsForRegion(region)
+    .map((s) => `r/${s}`)
+    .join(", ");
+}

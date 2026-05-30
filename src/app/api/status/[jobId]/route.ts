@@ -41,13 +41,10 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const result = await getRedditSearchJobStatus(
-      jobId.trim(),
-      apiKey,
-      servico,
-      regiao,
-      formatSubredditList(regiao),
-    );
-
+  jobId.trim(),
+  servico,
+  regiao,
+);
     return NextResponse.json({ jobId, ...result });
   } catch (error) {
     console.error("[api/status]", error);

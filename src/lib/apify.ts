@@ -14,8 +14,7 @@ export type ApifyRun = {
 export type ApifyRunResponse = {
   data?: ApifyRun;
 };
-
-import type { LeadResult } from "@/lib/reddit-leads";
+import type { LeadResult } from "@/lib/mock-leads";
 import { mapPostToLead } from "@/lib/reddit-leads";
 import { getSubredditsForRegion } from "@/lib/regions";
 import { extractKeywords } from "@/lib/keywords";

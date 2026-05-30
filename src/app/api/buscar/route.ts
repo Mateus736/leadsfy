@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const regiao = parseSearchRegion(body.regiao ?? body.region);
     const subreddits = getSubredditsForRegion(regiao);
-    const jobId = await startRedditSearchJob(servico, apiKey, regiao);
+    const jobId = await startRedditSearchJob(servico, regiao);
 
     return NextResponse.json({
       jobId,

@@ -42,7 +42,7 @@ export function mapPostToLead(
 
   const title = post.title.trim();
 
-  if (region === "brasil" && !hasPortugueseMarkersInTitle(title)) return null;
+ if (region !== "internacional" && !hasPortugueseMarkersInTitle(title)) return null;
 
   if (!hasHiringKeywordsInTitle(title, region)) return null;
 
