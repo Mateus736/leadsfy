@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { startRedditSearchJob } from "@/lib/apify";
 import { getApifyApiKey, validateApifyApiKey } from "@/lib/env";
-import { formatSubredditList, parseSearchRegion } from "@/lib/regions";
+import { getSubredditsForRegion, parseSearchRegion } from "@/lib/regions";
 
 export async function POST(request: Request) {
   try {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     const regiao = parseSearchRegion(body.regiao ?? body.region);
-    const subreddits = formatSubredditList(regiao);
+    const subreddits = getSubredditsForRegion(regiao);
     const jobId = await startRedditSearchJob(servico, apiKey, regiao);
 
     return NextResponse.json({
