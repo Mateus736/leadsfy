@@ -1,91 +1,60 @@
-export const STOP_WORDS = new Set([
-  "a", "o", "e", "de", "da", "do", "das", "dos", "em", "no", "na", "nos",
-  "nas", "um", "uma", "uns", "umas", "para", "com", "por", "que", "se",
-  "ao", "aos", "sobre", "seu", "sua", "seus", "suas", "mais", "muito",
-  "como", "mas", "também", "já", "só", "bem", "ainda",
-]);
-
-const SYNONYMS: Record<string, string[]> = {
-  editor: ["editor", "edição", "editar", "montagem", "corte", "video editor", "video editing"],
-  vídeo: ["video", "vídeo", "reels", "shorts", "youtube", "tiktok"],
-  designer: ["designer", "design", "gráfico", "identidade visual", "logo", "branding"],
-  dev: ["desenvolvedor", "developer", "programador", "programar", "código", "software"],
-  site: ["site", "website", "landing page", "web", "frontend"],
-  social: ["social media", "instagram", "redes sociais", "conteúdo", "marketing"],
-  copy: ["copywriter", "copy", "texto", "redator", "conteúdo", "escrita"],
-  foto: ["fotógrafo", "fotografia", "fotos", "photo"],
-  tradutor: ["tradutor", "tradução", "translate", "translation"],
+const SERVICE_EXPANSIONS: Record<string, string[]> = {
+  editor: ["video editor", "video editing", "content editor", "editor for hire", "video production"],
+  video: ["video editor", "video editing", "videographer", "video production", "content creator"],
+  designer: ["graphic designer", "graphic design", "logo designer", "brand designer", "visual designer"],
+  logo: ["logo designer", "logo design", "brand identity", "branding designer"],
+  dev: ["web developer", "software developer", "developer for hire", "programmer", "coder"],
+  developer: ["web developer", "software developer", "developer for hire", "full stack developer"],
+  web: ["web developer", "web designer", "website developer", "frontend developer"],
+  code: ["software developer", "programmer", "coder for hire", "developer"],
+  copy: ["copywriter", "content writer", "copywriting", "writer for hire"],
+  writer: ["copywriter", "content writer", "ghostwriter", "freelance writer"],
+  social: ["social media manager", "social media marketing", "content creator", "instagram manager"],
+  marketing: ["marketing specialist", "digital marketing", "marketing consultant", "social media manager"],
+  photo: ["photographer", "photography", "photo editor", "product photographer"],
+  seo: ["seo specialist", "seo expert", "search engine optimization", "seo consultant"],
+  translate: ["translator", "translation services", "freelance translator"],
+  animator: ["animator", "animation", "motion graphics", "2d animator", "3d animator"],
+  music: ["music producer", "audio engineer", "music composer", "sound designer"],
 };
 
-export function extractKeywords(servico: string, regiao: string): string[] {
+export function extractKeywords(servico: string): string[] {
   const normalized = servico
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ");
-
-  const words = normalized
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+    .replace(/[^a-z0-9\s]/g, " ")
+    .trim();
 
   const keywords = new Set<string>();
 
-  for (const word of words) {
-    keywords.add(word);
-    for (const [key, syns] of Object.entries(SYNONYMS)) {
-      if (word.includes(key) || key.includes(word)) {
-        syns.forEach((s) => keywords.add(s));
-      }
+  // Adiciona o termo original
+  keywords.add(normalized);
+
+  // Expande termos conhecidos
+  for (const [key, expansions] of Object.entries(SERVICE_EXPANSIONS)) {
+    if (normalized.includes(key)) {
+      expansions.forEach(e => keywords.add(e));
     }
   }
 
-  if (regiao === "brasil") {
-    keywords.add("contratar");
-    keywords.add("preciso");
-    keywords.add("busco");
-    keywords.add("procuro");
-    keywords.add("freelancer");
-  } else {
-    keywords.add("hiring");
-    keywords.add("for hire");
-    keywords.add("need");
-    keywords.add("looking for");
+  // Se não achou expansão, tenta variações simples
+  if (keywords.size === 1) {
+    keywords.add(`${normalized} for hire`);
+    keywords.add(`hiring ${normalized}`);
+    keywords.add(`need ${normalized}`);
+    keywords.add(`looking for ${normalized}`);
   }
 
-  return Array.from(keywords).slice(0, 8);
+  return Array.from(keywords).slice(0, 6);
 }
 
-export function hasHiringKeywordsInTitle(title: string, regiao = "internacional"): boolean {
-  const t = title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  if (regiao === "brasil") {
-    const ptKeywords = [
-      "contratar", "contratando", "preciso", "procuro", "busco",
-      "quero contratar", "vaga", "freelancer", "oportunidade",
-      "precisamos", "buscamos", "procuramos",
-    ];
-    return ptKeywords.some((k) => t.includes(k));
-  }
-
-  const enKeywords = [
-    "hiring", "for hire", "need", "looking for", "want", "seeking",
-    "wanted", "required", "job", "opportunity", "commission",
+export function hasHiringKeywordsInTitle(title: string): boolean {
+  const t = title.toLowerCase();
+  const keywords = [
+    "hiring", "for hire", "[for hire]", "[hiring]", "need",
+    "looking for", "want to hire", "seeking", "wanted",
+    "commission", "budget", "freelancer", "opportunity",
   ];
-  return enKeywords.some((k) => t.includes(k));
-}
-
-export function hasPortugueseMarkersInTitle(title: string): boolean {
-  const t = title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  const ptMarkers = [
-    "de", "para", "com", "que", "nao", "um", "uma", "preciso",
-    "busco", "quero", "como", "meu", "minha", "nosso", "nossa",
-  ];
-  return ptMarkers.some((m) => t.split(/\s+/).includes(m));
+  return keywords.some(k => t.includes(k));
 }

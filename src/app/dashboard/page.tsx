@@ -161,7 +161,7 @@ export default function DashboardPage() {
               rows={4}
               required
               disabled={isLoading}
-              placeholder="Ex.: Desenvolvo sites em Next.js para pequenas empresas..."
+              placeholder="Ex: video editor, graphic designer, web developer, copywriter..."
               value={service}
               onChange={(event) => setService(event.target.value)}
               className={inputClassName}

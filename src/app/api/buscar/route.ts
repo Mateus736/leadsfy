@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import { getSubredditsForRegion, parseSearchRegion } from "@/lib/regions";
-
+import { extractKeywords } from "@/lib/keywords";
 const HIRING_KEYWORDS = [
   "hiring", "for hire", "[for hire]", "[hiring]", "need",
   "looking for", "want to hire", "seeking", "wanted",
@@ -45,12 +45,7 @@ export async function POST(req: Request) {
     }
 
     const subreddits = getSubredditsForRegion(regiao);
-    const queries = [
-      `[hiring] ${servico}`,
-      `looking for ${servico}`,
-      `need ${servico}`,
-      servico,
-    ];
+    const queries = extractKeywords(servico);
 
     const allPosts: Record<string, unknown>[] = [];
 
