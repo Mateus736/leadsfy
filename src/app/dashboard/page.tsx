@@ -52,8 +52,7 @@ export default function Dashboard() {
       setIsSearching(false);
     }
   }
-
-  return (
+return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-6 py-4 flex justify-between items-center">
         <Link href="/" className="text-xl font-semibold">
@@ -104,8 +103,7 @@ export default function Dashboard() {
         >
           {isSearching ? "Buscando no Reddit..." : "Encontrar clientes"}
         </button>
-
-        {error && (
+{error && (
           <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
             {error}
           </div>
@@ -142,7 +140,9 @@ export default function Dashboard() {
                     </a>
                     <button
                       onClick={() => setSelectedMessage(
-                        selectedMessage === lead.suggestedMessage ? null : lead.suggestedMessage
+                        selectedMessage === lead.suggestedMessage
+                          ? null
+                          : lead.suggestedMessage
                       )}
                       className="px-4 py-2 rounded-lg bg-accent/20 text-accent text-sm hover:bg-accent/30 transition-all"
                     >
