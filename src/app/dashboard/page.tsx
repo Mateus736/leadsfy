@@ -1,271 +1,171 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
-import { LeadCard } from "@/components/lead-card";
-import { Logo } from "@/components/logo";
-import { MessageModal } from "@/components/message-modal";
-import { clearUser, getUser } from "@/lib/auth";
-import type { LeadResult } from "@/lib/mock-leads";
-import {
-  formatSubredditList,
-  SEARCH_REGIONS,
-  type SearchRegion,
-} from "@/lib/regions";
+import { useState } from "react";
+import Link from "next/link";
+import { SEARCH_REGIONS } from "@/lib/regions";
 
-const inputClassName =
-  "w-full resize-y rounded-xl border border-border bg-input px-4 py-3 text-foreground outline-none placeholder:text-muted/60 focus:border-accent focus:ring-2 focus:ring-accent/20";
+interface Lead {
+  title: string;
+  body: string;
+  subreddit: string;
+  url: string;
+  upvotes: number;
+  score: number;
+  urgency: string;
+  suggestedMessage: string;
+}
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [service, setService] = useState("");
-  const [region, setRegion] = useState<SearchRegion>("internacional");
-  const [results, setResults] = useState<LeadResult[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [messagePreview, setMessagePreview] = useState<string | null>(null);
+export default function Dashboard() {
+  const [servico, setServico] = useState("");
+  const [regiao, setRegiao] = useState("internacional");
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState("");
+  const [total, setTotal] = useState(0);
+  const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const user = getUser();
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
-    setUserEmail(user.email);
-  }, [router]);
-
-  function handleLogout() {
-    clearUser();
-    router.push("/login");
-  }
-
-  async function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!service.trim() || isLoading) return;
-
-    const servico = service.trim();
-
-    setIsLoading(true);
-    setError(null);
-    setHasSearched(true);
-    setMessagePreview(null);
-    setResults([]);
+  async function handleSearch() {
+    if (!servico.trim()) return;
+    setIsSearching(true);
+    setError("");
+    setLeads([]);
+    setTotal(0);
 
     try {
-      const startResponse = await fetch("/api/buscar", {
+      const res = await fetch("/api/buscar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ servico, regiao: region }),
+        body: JSON.stringify({ servico, regiao }),
       });
 
-      const startData = await startResponse.json();
+      const data = await res.json();
 
-      if (!startResponse.ok) {
-        throw new Error(startData.error ?? "Não foi possível iniciar a busca.");
+      if (!res.ok) {
+        throw new Error(data.error ?? "Erro na busca.");
       }
 
-      const jobId = startData.jobId as string;
-      if (!jobId) {
-        throw new Error("Resposta inválida: jobId ausente.");
-      }
-
-      const params = new URLSearchParams({
-        servico,
-        regiao: region,
-      });
-
-      const pollIntervalMs = 5000;
-      const maxAttempts = 60;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (attempt > 0) {
-          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-        }
-
-        const statusResponse = await fetch(
-          `/api/status/${jobId}?${params.toString()}`,
-        );
-        const statusData = await statusResponse.json();
-
-        if (!statusResponse.ok) {
-          throw new Error(statusData.error ?? "Erro ao consultar status.");
-        }
-
-        if (statusData.status === "completed") {
-          setResults(statusData.leads ?? []);
-          return;
-        }
-
-        if (statusData.status === "failed") {
-          throw new Error(statusData.error ?? "A busca no Reddit falhou.");
-        }
-      }
-
-      throw new Error(
-        "A busca demorou mais que o esperado. Tente novamente em alguns minutos.",
-      );
+      setLeads(data.leads ?? []);
+      setTotal(data.total ?? 0);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro inesperado ao buscar leads.",
-      );
+      setError(String(err));
     } finally {
-      setIsLoading(false);
+      setIsSearching(false);
     }
-  }
-
-  if (!userEmail) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-muted">
-        Carregando...
-      </div>
-    );
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Logo href="/dashboard" />
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-muted sm:inline">{userEmail}</span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="text-sm text-muted hover:text-foreground transition-colors"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border px-6 py-4 flex justify-between items-center">
+        <Link href="/" className="text-xl font-semibold">
+          Leads<span className="text-accent">fy</span>
+        </Link>
+        <Link href="/" className="text-sm text-muted">Voltar</Link>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Dashboard
-          </h1>
-          <p className="mt-2 text-muted">
-            Descreva seu serviço e encontre oportunidades no Reddit.
-          </p>
+      <main className="max-w-2xl mx-auto px-6 py-10">
+        <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+        <p className="text-muted mb-8">Descreva seu serviço e encontre oportunidades no Reddit.</p>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">Seu serviço</label>
+          <textarea
+            className="w-full rounded-xl border border-border bg-card p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
+            rows={3}
+            placeholder="Ex: video editor, graphic designer, web developer, copywriter..."
+            value={servico}
+            onChange={(e) => setServico(e.target.value)}
+          />
         </div>
 
-        <form onSubmit={handleSearch} className="mt-8 max-w-2xl space-y-4">
-          <div>
-            <label htmlFor="service" className="mb-2 block text-sm font-medium">
-              Seu serviço
-            </label>
-            <textarea
-              id="service"
-              rows={4}
-              required
-              disabled={isLoading}
-              placeholder="Ex: video editor, graphic designer, web developer, copywriter..."
-              value={service}
-              onChange={(event) => setService(event.target.value)}
-              className={inputClassName}
-            />
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">Idioma / região</label>
+          <div className="flex flex-col gap-2">
+            {SEARCH_REGIONS.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRegiao(r.value)}
+                className={`text-left px-4 py-3 rounded-xl border transition-all ${
+                  regiao === r.value
+                    ? "border-accent bg-accent/10"
+                    : "border-border bg-card"
+                }`}
+              >
+                <div className="font-medium text-sm">{r.label}</div>
+                <div className="text-xs text-muted mt-1">{r.description}</div>
+              </button>
+            ))}
           </div>
+        </div>
 
-          <fieldset>
-            <legend className="mb-3 block text-sm font-medium">
-              Idioma / região
-            </legend>
-            <div className="space-y-2">
-              {SEARCH_REGIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                    region === option.value
-                      ? "border-accent bg-accent/10"
-                      : "border-border bg-card hover:border-accent/30"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="region"
-                    value={option.value}
-                    checked={region === option.value}
-                    disabled={isLoading}
-                    onChange={() => setRegion(option.value)}
-                    className="mt-1 accent-accent"
-                  />
-                  <span>
-                    <span className="block font-medium">{option.label}</span>
-                    <span className="mt-0.5 block text-xs text-muted">
-                      {option.description}
+        <button
+          onClick={handleSearch}
+          disabled={isSearching || !servico.trim()}
+          className="w-full py-3 rounded-xl bg-accent text-white font-semibold disabled:opacity-50 transition-all hover:opacity-90"
+        >
+          {isSearching ? "Buscando no Reddit..." : "Encontrar clientes"}
+        </button>
+
+        {error && (
+          <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        {leads.length > 0 && (
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Resultados</h2>
+              <span className="text-sm text-muted">{total} oportunidades encontradas</span>
+            </div>
+            <div className="flex flex-col gap-4">
+              {leads.map((lead, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs text-muted">{lead.subreddit}</span>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      lead.urgency === "quente"
+                        ? "bg-accent/20 text-accent"
+                        : "bg-yellow-500/20 text-yellow-400"
+                    }`}>
+                      {lead.urgency?.toUpperCase()}
                     </span>
-                  </span>
-                </label>
+                  </div>
+                  <h3 className="font-medium text-sm mb-3">{lead.title}</h3>
+                  <div className="flex gap-2">
+                    
+                      href={lead.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-card/80 transition-all"
+                    >
+                      Abrir no Reddit
+                    </a>
+                    <button
+                      onClick={() => setSelectedMessage(
+                        selectedMessage === lead.suggestedMessage ? null : lead.suggestedMessage
+                      )}
+                      className="px-4 py-2 rounded-lg bg-accent/20 text-accent text-sm hover:bg-accent/30 transition-all"
+                    >
+                      Ver mensagem sugerida
+                    </button>
+                  </div>
+                  {selectedMessage === lead.suggestedMessage && (
+                    <div className="mt-3 p-3 rounded-lg bg-background border border-border text-sm text-muted">
+                      {lead.suggestedMessage}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
-          </fieldset>
+          </div>
+        )}
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="rounded-xl bg-accent px-8 py-3 font-medium text-white shadow-lg shadow-accent/20 hover:bg-accent-muted transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isLoading ? "Buscando no Reddit..." : "Buscar clientes"}
-          </button>
-        </form>
-
-        {hasSearched && (
-          <section className="mt-12" aria-live="polite">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <h2 className="text-lg font-semibold">Resultados</h2>
-              {!isLoading && !error && (
-                <p className="text-sm text-muted">
-                  {results.length}{" "}
-                  {results.length === 1
-                    ? "oportunidade encontrada"
-                    : "oportunidades encontradas"}
-                </p>
-              )}
-            </div>
-
-            {isLoading && (
-              <p className="mt-6 text-sm text-muted">
-                Buscando posts em {formatSubredditList(region)}... A consulta
-                roda em segundo plano e pode levar alguns minutos.
-              </p>
-            )}
-
-            {error && (
-              <p className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {error}
-              </p>
-            )}
-
-            {!isLoading && !error && results.length === 0 && (
-              <p className="mt-6 text-sm text-muted">
-                Nenhum lead encontrado para essa descrição. Tente usar outras
-                palavras-chave do seu serviço.
-              </p>
-            )}
-
-            {!isLoading && results.length > 0 && (
-              <ul className="mt-6 grid gap-4">
-                {results.map((lead) => (
-                  <LeadCard
-                    key={lead.id}
-                    lead={lead}
-                    onViewMessage={setMessagePreview}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
+        {!isSearching && leads.length === 0 && !error && servico && (
+          <div className="mt-8 text-center text-muted text-sm">
+            Nenhum lead encontrado. Tente outras palavras-chave.
+          </div>
         )}
       </main>
-
-      {messagePreview && (
-        <MessageModal
-          message={messagePreview}
-          onClose={() => setMessagePreview(null)}
-        />
-      )}
     </div>
   );
 }
