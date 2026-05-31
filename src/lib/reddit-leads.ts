@@ -44,7 +44,7 @@ export function mapPostToLead(
 
  if (region !== "internacional" && !hasPortugueseMarkersInTitle(title)) return null;
 
-  if (!hasHiringKeywordsInTitle(title, region)) return null;
+  // if (!hasHiringKeywordsInTitle(title, region)) return null;
 
   const id = post.parsedId ?? post.id ?? post.url;
   const subreddit = post.communityName ?? "r/unknown";
